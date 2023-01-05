@@ -4,11 +4,13 @@ import textwrap
 import threading
 import os
 import re
+import string
 from collections import namedtuple
 
 class fuzz:
     def __init__(self, args) -> None:
         self.args = args
+        self.args.method = self.args.method.lower()
         # regex = re.compile('.*{[a-zA-Z]}.*')
         # for _ in args.wordlist.split(','):
         #     if regex.match(_) == None:
@@ -36,12 +38,10 @@ class fuzz:
             status code
             '''
         for i in range(len(self.signlist)):
-            print(self.signlist[i].file, self.signlist[i].sign)
-        
-    def changeSignature(self):
-        pass
+            print(f'{self.signlist[i].file}<-{self.signlist[i].sign}')
 
     def run(self):
+        print(self.args.header)
         mark = ['' for i in range(len(self.signlist))]
         while True:
             for i in range(len(self.signlist) - 1):
@@ -60,12 +60,23 @@ class fuzz:
 
     # multi threading
     def attack(self, payload):
-        #print(payload)
-        res = requests.get(url=payload)
-        if str(res.status_code) in self.statuscode:
-            print(f'{payload:45s} [{res.status_code}] [{len(res.text):^5d}]\n', end='')
-        else:
-            print(f'--{payload:45s} [{res.status_code}] [{len(res.text):^5d}]\n', end='')
+        result = ''
+        res = eval(f"requests.{self.args.method}(url=payload, data='{self.args.data}', headers='{self.args.header}')") # for scalability
+        
+        # check http status code
+        if self.statuscode and str(res.status_code) in self.statuscode:
+            result += f'[{res.status_code}] [{len(res.text):^5d}]'    
+            
+        # check flag
+        if self.args.flag != '':
+            result += f' [flag: '
+            if res.text.find(self.args.flag) != -1:
+                result += 'O]'
+            else: 
+                result += 'X]'
+        if result != '':
+            result = f'{payload:45s}' + result
+            print(f'{result}\n', end='') # end = '\n' then it have multi thraeding problem
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -76,15 +87,17 @@ if __name__ == '__main__':
             '''
         )
 
-    parser.add_argument('-w', '--wordlist', help='word list', default="digits.txt:{2},digits_copy.txt:{0},digits1.txt:{1}")
+    parser.add_argument('-w', '--wordlist', help='word list', default="digits.txt:{0},digits1.txt:{1}")
 
     # http options
-    parser.add_argument('-u', '--url', help='target url', default="http://google.com/{0}{1}{2}")
-    parser.add_argument('-H', '--header', help="http header")
-    parser.add_argument('-d', '--data', help='POST Data')
+    parser.add_argument('-u', '--url', help='target url', default="http://google.com/{0}{1}")
+    parser.add_argument('-H', '--header', help="http header", default='')
+    parser.add_argument('-d', '--data', help='POST Data', default='')
     parser.add_argument('-X', '--method', help='http Method', default='GET')
-    parser.add_argument('-sf','--statusCode', help='http status code filter ex) 200,404', default='200,204,301,302,307,401,403,405,500')
-
+    parser.add_argument('-sf','--statusCode', help='http status code filter ex) 200,404', default='200,204,301,302,307,401,404,403,405,500')
+    parser.add_argument('--timeout', type=int, help='requests', default=10)
+    parser.add_argument('-f', '--flag', help='check it is included', default='')
+    
     args = parser.parse_args()
 
     Fuzz = fuzz(args)
