@@ -29,8 +29,16 @@ class fuzz:
             self.signlist[i].file = self.wordListArray[i].split(':')[0]
             try:
                 self.signlist[i].sign = self.wordListArray[i].split(':')[1]
+                if self.signlist[i].sign == '':
+                    raise IndexError
             except IndexError:
                 self.signlist[i].sign = '{}'        # deflaot sign
+            try:
+                self.signlist[i].exp = self.wordListArray[i].split(':')[2]
+                if self.signlist[i].exp == '':
+                    raise IndexError
+            except IndexError:
+                self.signlist[i].exp = '$'        # deflaot exp
             
             self.wordListFile[i] = open(self.signlist[i].file , 'r')
             self.statuscode = args.statusCode.split(',') 
@@ -53,7 +61,8 @@ class fuzz:
                 break
             payload = args.url
             for i in range(len(self.signlist)): # here 
-                payload = payload.replace(self.signlist[i].sign, mark[i]).strip()
+                mark[i] = eval(self.signlist[i].exp.replace('$', 'mark[i]'))
+                payload = payload.replace(self.signlist[i].sign, str(mark[i])).strip()
 
             attack_thread = threading.Thread(target=self.attack, args=(payload,))
             attack_thread.start()
@@ -87,7 +96,7 @@ if __name__ == '__main__':
             '''
         )
 
-    parser.add_argument('-w', '--wordlist', help='word list', default="digits.txt:{0},digits1.txt:{1}")
+    parser.add_argument('-w', '--wordlist', help='word list', default="digits.txt:{0}:,digits1.txt:{1}")
 
     # http options
     parser.add_argument('-u', '--url', help='target url', default="http://google.com/{0}{1}")
