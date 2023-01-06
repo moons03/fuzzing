@@ -5,12 +5,22 @@ import threading
 import os
 import re
 import string
+from urllib.parse import urlparse
 from collections import namedtuple
 
-class fuzz:
+def urlcheck(url):
+    check = urlparse(url)
+    if check.scheme == '':
+        check = check._replace(scheme = 'http', netloc = check.path, path = '')
+    return check.geturl()
+class Fuzz:
     def __init__(self, args) -> None:
         self.args = args
         self.args.method = self.args.method.lower()
+        self.missingPacket = list()
+        #url parser
+        self.args.url = urlcheck(self.args.url)
+        print(self.args.url)
         # regex = re.compile('.*{[a-zA-Z]}.*')
         # for _ in args.wordlist.split(','):
         #     if regex.match(_) == None:
@@ -20,6 +30,7 @@ class fuzz:
         self.wordListArray = args.wordlist.split(',')
         self.wordListFile = args.wordlist.split(',')
         
+        self.threads = list()
         for i in range(len(self.signlist)):
             
             self.signlist[i] = namedtuple('Signlist', 'file, sign')
@@ -59,19 +70,24 @@ class fuzz:
                     mark[i + 1] = self.wordListFile[i + 1].readline().strip()
             if ''.join(mark) == '':
                 break
-            payload = args.url
+            payload = self.args.url
             for i in range(len(self.signlist)): # here 
                 mark[i] = eval(self.signlist[i].exp.replace('$', 'mark[i]'))
                 payload = payload.replace(self.signlist[i].sign, str(mark[i])).strip()
 
             attack_thread = threading.Thread(target=self.attack, args=(payload,))
+            attack_thread.daemon = True # daemon thread
             attack_thread.start()
+            self.threads.append(attack_thread)
 
     # multi threading
     def attack(self, payload):
         result = ''
-        res = eval(f"requests.{self.args.method}(url=payload, data='{self.args.data}', headers='{self.args.header}')") # for scalability
-        
+        try:
+            res = eval(f"requests.{self.args.method}(url=payload, data='{self.args.data}', headers='{self.args.header}', timeout={self.args.timeout})") # for scalability
+        except requests.Timeout:
+            self.missingPacket.append(payload +'' if self.args.data == '' else self.args.data)
+            return
         # check http status code
         if self.statuscode and str(res.status_code) in self.statuscode:
             result += f'[{res.status_code}] [{len(res.text):^5d}]'    
@@ -99,15 +115,18 @@ if __name__ == '__main__':
     parser.add_argument('-w', '--wordlist', help='word list', default="digits.txt:{0}:,digits1.txt:{1}")
 
     # http options
-    parser.add_argument('-u', '--url', help='target url', default="http://google.com/{0}{1}")
+    parser.add_argument('-u', '--url', help='target url', default="google.com/{0}{1}")
     parser.add_argument('-H', '--header', help="http header", default='')
     parser.add_argument('-d', '--data', help='POST Data', default='')
     parser.add_argument('-X', '--method', help='http Method', default='GET')
     parser.add_argument('-sf','--statusCode', help='http status code filter ex) 200,404', default='200,204,301,302,307,401,404,403,405,500')
-    parser.add_argument('--timeout', type=int, help='requests', default=10)
+    parser.add_argument('--timeout', type=float, help='requests time out', default=0.1)
     parser.add_argument('-f', '--flag', help='check it is included', default='')
     
     args = parser.parse_args()
 
-    Fuzz = fuzz(args)
-    Fuzz.run()
+    fuzz = Fuzz(args)
+    fuzz.run()
+    for thread in fuzz.threads:
+        thread.join()
+    os.system("pause")
