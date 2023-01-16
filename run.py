@@ -129,7 +129,7 @@ class Fuzz:
                     self.args.header = self.args.header.replace(self.signlist[i].sign, str(mark[i]))
                     self.args.timeout = self.args.timeout.replace(self.signlist[i].sign, str(mark[i]))
                 except Exception as e:
-                    print(e.)
+                    print(e)
                     exit()
 
             attack_thread = threading.Thread(target=self.attack, args=(payload,))
