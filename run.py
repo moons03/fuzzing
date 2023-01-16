@@ -18,7 +18,11 @@ class Fuzz:
     def __init__(self, args) -> None:
         self.args = args
         self.args.method = self.args.method.lower()
+        
+        # summary
+        self.Packet = 0
         self.missingPacket = list()
+        
         #url parser
         self.args.url = urlcheck(self.args.url)
         print(self.args.url)
@@ -81,7 +85,9 @@ class Fuzz:
 
     def exit(self, e=''):
         print(e)
-        self.stdout('\n' + '-' * 30 + '{Missing Pachket}' + '-' * 30 + '\n')
+        if len(self.missingPacket) != 0:
+            self.stdout('\n' + '-' * 30 + '{Missing Pachket}' + '-' * 30 + '\n')
+        print(f'{self.Packet}/{self.Packet - len(self.missingPacket)}')
         for line in self.missingPacket:
             self.stdout(line)
         if self.file != None:
@@ -97,22 +103,34 @@ class Fuzz:
         print(self.args.header)
         mark = ['' for i in range(len(self.signlist))]
         while True:
-            for i in range(len(self.signlist) - 1):
-                mark[i] = self.wordListFile[i].readline().strip()
+            
+            mark[0] = self.wordListFile[0].readline().strip()
+            
+            for i in range(len(self.signlist)):
+                # check every file reader 
                 if mark[i] == '':
                     self.wordListFile[i].seek(0)
-                    mark[i + 1] = self.wordListFile[i + 1].readline().strip()
-            if ''.join(mark) == '':
-                break
+                    mark[i] = self.wordListFile[i].readline().strip()
+                    # not last mark is finish
+                    if i < len(self.signlist) - 1:
+                        mark[i + 1] = self.wordListFile[i + 1].readline().strip()
+                    else:
+                        return 0
+            
+            # formating payload 
             payload = self.args.url
             for i in range(len(self.signlist)): # here 
                 
-                # add rule
-                mark[i] = eval(self.signlist[i].exp.replace('$', 'mark[i]'))
-                payload = payload.replace(self.signlist[i].sign, str(mark[i])).strip()
-                self.args.data = self.args.data.replace(self.signlist[i].sign, str(mark[i]))
-                self.args.header = self.args.header.replace(self.signlist[i].sign, str(mark[i]))
-                self.args.timeout = self.args.timeout.replace(self.signlist[i].sign, str(mark[i]))
+                try:
+                    # add rule
+                    mark[i] = eval(self.signlist[i].exp.replace('$', 'mark[i]'))
+                    payload = payload.replace(self.signlist[i].sign, str(mark[i])).strip()
+                    self.args.data = self.args.data.replace(self.signlist[i].sign, str(mark[i]))
+                    self.args.header = self.args.header.replace(self.signlist[i].sign, str(mark[i]))
+                    self.args.timeout = self.args.timeout.replace(self.signlist[i].sign, str(mark[i]))
+                except Exception as e:
+                    print(e.)
+                    exit()
 
             attack_thread = threading.Thread(target=self.attack, args=(payload,))
             attack_thread.daemon = True # daemon thread
@@ -123,12 +141,16 @@ class Fuzz:
 
     # multi threading
     def attack(self, payload):
+        self.Packet += 1
         result = ''
         try:
             res = eval(f"requests.{self.args.method}(url=payload, data='{self.args.data}', headers='{self.args.header}', timeout={self.args.timeout})") # for scalability
         except requests.Timeout:
-            self.missingPacket.append(payload +'' if self.args.data == '' else self.args.data)
-            return
+            try:
+                res = eval(f"requests.{self.args.method}(url=payload, data='{self.args.data}', headers='{self.args.header}', timeout={self.args.timeout})")
+            except requests.Timeout:
+                self.missingPacket.append(payload +'' if self.args.data == '' else self.args.data)
+                return 
         # check http status code
         if self.statuscode and str(res.status_code) in self.statuscode:
             result += f'[{res.status_code}] [{len(res.text):^5d}]'    
@@ -153,12 +175,12 @@ if __name__ == '__main__':
             '''
         )
 
-    parser.add_argument('-w', '--wordlist', help='word list', default="digits.txt:{0}:,digits1.txt:{1}")
+    parser.add_argument('-w', '--wordlist', help='word list', default="digits.txt:{0}:$+f'({en($)})'")
     parser.add_argument('-o', '--outfile', action='store_true', help='Wirte output to a file name as the remoted name')
     parser.add_argument('-O', '--remoteName', help='Write to file instead of stdout', default='')
 
     # http options
-    parser.add_argument('-u', '--url', help='target url', default="google.com/{0}{1}")
+    parser.add_argument('-u', '--url', help='target url', default="google.com/{0}/{1}/{2}")
     parser.add_argument('-H', '--header', help="http header", default='')
     parser.add_argument('-d', '--data', help='POST Data', default='')
     parser.add_argument('-X', '--method', help='http Method', default='GET')
